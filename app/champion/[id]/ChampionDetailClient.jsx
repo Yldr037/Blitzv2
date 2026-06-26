@@ -17,7 +17,8 @@ import {
   Coins,
   TrendingUp,
   X,
-  ExternalLink
+  ExternalLink,
+  ShieldAlert
 } from "lucide-react";
 import { tagColors, laneInfo } from "../../lib/champions";
 import { getBuildRecommendation, RUNES } from "../../lib/buildRecommendations";
@@ -42,23 +43,23 @@ const laneTranslations = {
 const getMobalyticsSlug = (championId) => {
   const overrides = {
     MonkeyKing: "wukong",
-    JarvanIV: "jarvan-iv",
-    DrMundo: "dr-mundo",
-    MissFortune: "miss-fortune",
-    MasterYi: "master-yi",
-    LeeSin: "lee-sin",
-    KogMaw: "kog-maw",
-    RekSai: "rek-sai",
-    TahmKench: "tahm-kench",
-    TwistedFate: "twisted-fate",
-    XinZhao: "xin-zhao",
-    AurelionSol: "aurelion-sol",
-    ChoGath: "cho-gath",
-    KaiSa: "kai-sa",
-    BelVeth: "bel-veth",
-    KSante: "k-sante",
-    VelKoz: "vel-koz",
-    Renata: "renata-glasc",
+    JarvanIV: "jarvaniv",
+    DrMundo: "drmundo",
+    MissFortune: "missfortune",
+    MasterYi: "masteryi",
+    LeeSin: "leesin",
+    KogMaw: "kogmaw",
+    RekSai: "reksai",
+    TahmKench: "tahmkench",
+    TwistedFate: "twistedfate",
+    XinZhao: "xinzhao",
+    AurelionSol: "aurelionsol",
+    ChoGath: "chogath",
+    KaiSa: "kaisa",
+    BelVeth: "belveth",
+    KSante: "ksante",
+    VelKoz: "velkoz",
+    Renata: "renata",
   };
   
   if (overrides[championId]) {
@@ -869,6 +870,15 @@ export default function ChampionDetailClient({ champion, isModal = false }) {
             <div className="relative w-full min-h-[500px] bg-[#0e0e1a]/85 backdrop-blur-xl border border-white/5 rounded-2xl overflow-hidden shadow-2xl p-8 flex flex-col justify-center items-center gap-4">
               <div className="w-12 h-12 rounded-full border-4 border-amber-400/10 border-t-amber-400 animate-spin" />
               <p className="text-xs text-white/50 font-semibold uppercase tracking-wider">Mobalytics Canlı Build Verileri Yükleniyor...</p>
+            </div>
+          ) : buildError ? (
+            /* Error / Failed State */
+            <div className="relative w-full min-h-[300px] bg-[#0e0e1a]/85 backdrop-blur-xl border border-red-500/20 rounded-2xl overflow-hidden shadow-2xl p-8 flex flex-col justify-center items-center gap-4">
+              <ShieldAlert size={48} className="text-red-400/60" />
+              <h4 className="text-base font-bold text-white uppercase tracking-wider">Canlı Veri Alınamadı</h4>
+              <p className="text-xs text-white/50 max-w-md text-center leading-relaxed">
+                Bu şampiyon veya koridor kombinasyonu için canlı Mobalytics verileri alınamadı. Canlı eşya ve rün önerileri şu anda gösterilemiyor.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">

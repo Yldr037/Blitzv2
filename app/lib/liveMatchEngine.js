@@ -46,38 +46,88 @@ export function getChampionDamageType(champion) {
   ]);
   
   if (mixedChampions.has(name)) return "Karma";
-
+  
   // Check tags as fallback
   if (champion.tags?.includes("Mage")) return "AP";
 
   return "AD";
 }
 
-// Recommends situational items based on enemy composition and player's archetype (AP, AD/ADC, Fighter, Tank, Support)
-export function getSituationalRecommendations(enemies, myChampion, myRole) {
+// Maps specific counter categories to item candidates (ID, Name, Cost)
+const COUNTER_MAP = {
+  AP: [
+    { id: 2504, name: "Kutluyas Rukern", cost: 2900 },
+    { id: 3156, name: "Malmortius'un Ağzı", cost: 2800 },
+    { id: 3091, name: "Aklın Sonu", cost: 2800 },
+    { id: 3102, name: "Banshee'ın Duvağı", cost: 3100 },
+    { id: 3065, name: "Ruh Gömleği", cost: 2800 },
+    { id: 6664, name: "Donuk Işıltı", cost: 2800 },
+    { id: 3111, name: "Merkür'ün Adımları", cost: 1200 }
+  ],
+  AD: [
+    { id: 3157, name: "Zhonya'nın Kumsaati", cost: 3250 },
+    { id: 3010, name: "Ölümün Dansı", cost: 3200 },
+    { id: 3026, name: "Koruyucu Melek", cost: 3000 },
+    { id: 3143, name: "Randuin'in Alameti", cost: 2700 },
+    { id: 3110, name: "Donmuş Yürek", cost: 2300 },
+    { id: 3075, name: "Çivili Zırh", cost: 2700 },
+    { id: 3742, name: "Ölü Adamın Zırhı", cost: 2900 },
+    { id: 3047, name: "Çelik Kaplamalı Çizme", cost: 1000 }
+  ],
+  HEAL: [
+    { id: 3165, name: "Morellonomikon", cost: 2200 },
+    { id: 3033, name: "Ölüm Hatırası", cost: 3000 },
+    { id: 3075, name: "Çivili Zırh", cost: 2700 },
+    { id: 6609, name: "Kimyasal Kimya-Pala", cost: 2200 }
+  ],
+  TANK: [
+    { id: 3036, name: "Dominik Efendi'nin Hürmeti", cost: 3000 },
+    { id: 3071, name: "Kara Balta", cost: 3000 },
+    { id: 3135, name: "Boşluk Değneği", cost: 3000 },
+    { id: 3137, name: "Kriptoçiçek", cost: 2850 },
+    { id: 3302, name: "Terminus", cost: 3000 },
+    { id: 3035, name: "Serylda'nın Garezi", cost: 3200 }
+  ],
+  BURST: [
+    { id: 3053, name: "Sterak'ın Güvencesi", cost: 3000 },
+    { id: 3157, name: "Zhonya'nın Kumsaati", cost: 3250 },
+    { id: 3026, name: "Koruyucu Melek", cost: 3000 },
+    { id: 2504, name: "Kutluyas Rukern", cost: 2900 },
+    { id: 3102, name: "Banshee'ın Duvağı", cost: 3100 },
+    { id: 3010, name: "Ölümün Dansı", cost: 3200 }
+  ],
+  CC: [
+    { id: 3111, name: "Merkür'ün Adımları", cost: 1200 }
+  ]
+};
+
+// Returns a counter item only if it is present in the Mobalytics build's situational/full build list
+function findMobaCounterItem(category, resolvedBuild) {
+  if (!resolvedBuild) return null;
+  const mobaSituationalIds = new Set(resolvedBuild.situational?.map(item => Number(item.id)) || []);
+  const candidates = COUNTER_MAP[category] || [];
+  
+  for (const candidate of candidates) {
+    if (mobaSituationalIds.has(candidate.id)) {
+      return {
+        id: candidate.id.toString(),
+        name: candidate.name,
+        cost: candidate.cost
+      };
+    }
+  }
+  return null;
+}
+
+// Recommends situational items based on enemy composition, strictly matching Mobalytics build suggestions
+export function getSituationalRecommendations(enemies, myChampion, myRole, resolvedBuild = null) {
   const recommendations = [];
   
-  if (!enemies || enemies.length === 0) return recommendations;
-
-  // Determine player's itemization archetype
-  let myArchetype = "Fighter"; // default
-  if (myChampion.tags?.includes("Mage")) {
-    myArchetype = "AP";
-  } else if (myChampion.tags?.includes("Marksman")) {
-    myArchetype = "ADC";
-  } else if (myChampion.tags?.includes("Tank")) {
-    myArchetype = "Tank";
-  } else if (myRole === "Support" && myChampion.tags?.includes("Support")) {
-    myArchetype = "Support";
-  } else if (myChampion.tags?.includes("Assassin")) {
-    // If assassin, itemizes similarly to Fighter or AP depending on damage type
-    myArchetype = myChampion.info?.magic > myChampion.info?.attack ? "AP" : "Fighter";
-  }
+  if (!enemies || enemies.length === 0 || !resolvedBuild) return recommendations;
 
   // Calculate enemy team stats
   let apCount = 0;
   let adCount = 0;
-  let mixedCount = 0;
   let healerCount = 0;
   let burstCount = 0;
   let ccCount = 0;
@@ -102,8 +152,6 @@ export function getSituationalRecommendations(enemies, myChampion, myRole) {
       adCount++;
       adNames.push(name);
     } else {
-      mixedCount++;
-      // distribute mixed to both or count as both for threats
       apCount += 0.5;
       adCount += 0.5;
     }
@@ -129,33 +177,13 @@ export function getSituationalRecommendations(enemies, myChampion, myRole) {
   // 1. Anti-AP (Magic Resist)
   if (apCount >= 2.5) {
     const listAp = apNames.slice(0, 3).join(", ");
-    if (myArchetype === "AP") {
+    const match = findMobaCounterItem("AP", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3102", // Banshee's Veil
-        name: "Banshee'ın Duvağı",
-        cost: 3100,
-        reason: `Rakip takımda yüksek büyü hasarı (${listAp}) bulunduğu için yetenek engelleyen büyü kalkanı ve büyü direnci sağlar.`
-      });
-    } else if (myArchetype === "Fighter") {
-      recommendations.push({
-        id: "3156", // Maw of Malmortius
-        name: "Malmortius'un Ağzı",
-        cost: 2800,
-        reason: `Rakip büyü hasarı veren şampiyonlara (${listAp}) karşı canın azaldığında büyük bir sihirli kalkan elde etmeni sağlar.`
-      });
-    } else if (myArchetype === "ADC") {
-      recommendations.push({
-        id: "3156", // Maw of Malmortius or Wit's End
-        name: "Aklın Sonu",
-        cost: 2800,
-        reason: `Saldırı hızı ve büyü direnci sağlayarak rakip AP tehdidine (${listAp}) karşı hayatta kalmana yardımcı olur.`
-      });
-    } else if (myArchetype === "Tank") {
-      recommendations.push({
-        id: "2504", // Kaenic Rookern
-        name: "Kutluyas Rukern",
-        cost: 2900,
-        reason: `Rakipte yüksek AP hasarı (${listAp}) var. Çatışma dışındayken azami canına oranla devasa bir büyü kalkanı kazanarak AP burstünü tamamen engeller.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `Rakip takımda yüksek büyü hasarı (${listAp}) bulunduğu için büyü direnci ve koruma sağlar.`
       });
     }
   }
@@ -163,75 +191,27 @@ export function getSituationalRecommendations(enemies, myChampion, myRole) {
   // 2. Anti-AD / Anti-Crit
   if (adCount >= 2.5) {
     const listAd = adNames.slice(0, 3).join(", ");
-    
-    // Suggest Steelcaps for boots if AD is high
-    recommendations.push({
-      id: "3047", // Plated Steelcaps
-      name: "Çelik Kaplamalı Çizme",
-      cost: 1000,
-      reason: `Rakip takımda çok fazla fiziksel hasar ve düz vuruş odaklı şampiyon (${listAd}) olduğu için düz vuruşlardan alınan hasarı %12 azaltır.`
-    });
-
-    if (myArchetype === "AP") {
+    const match = findMobaCounterItem("AD", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3157", // Zhonya's Hourglass
-        name: "Zhonya'nın Kumsaati",
-        cost: 3250,
-        reason: `Rakip AD şampiyonların (${listAd}) anlık hasarından kurtulmak ve kendini korumak için 2.5 saniye boyunca hedef alınamaz olmanı sağlar.`
-      });
-    } else if (myArchetype === "Fighter") {
-      recommendations.push({
-        id: "3010", // Death's Dance
-        name: "Ölümün Dansı",
-        cost: 3200,
-        reason: `Alınan fiziksel hasarın %30'unu zamana yayarak rakip AD kompozisyonuna (${listAd}) karşı anlık elenmeni engeller ve alt etmelerde can yeniler.`
-      });
-    } else if (myArchetype === "ADC") {
-      recommendations.push({
-        id: "3026", // Guardian Angel
-        name: "Koruyucu Melek",
-        cost: 3000,
-        reason: `Saldırı gücü ve zırh verir. Rakip AD suikastçılar/taşıyıcılar (${listAd}) seni düşürdüğünde yeniden canlanmanı sağlar.`
-      });
-    } else if (myArchetype === "Tank") {
-      recommendations.push({
-        id: "3143", // Randuin's Omen
-        name: "Randuin'in Alameti",
-        cost: 2700,
-        reason: `Rakipte düz vuruş veya kritik hasar odaklı şampiyonlar (${listAd}) var. Kritik vuruş hasarını azaltır ve rakipleri yavaşlatır.`
-      });
-      recommendations.push({
-        id: "3110", // Frozen Heart
-        name: "Donmuş Yürek",
-        cost: 2300,
-        reason: `Düşük maliyetle yüksek zırh sağlar ve yakındaki düşmanların saldırı hızını azaltarak AD taşıyıcıları zayıflatır.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `Rakip fiziksel hasar taşıyıcılarına (${listAd}) karşı zırh ve hayatta kalma avantajı sağlar.`
       });
     }
   }
 
-  // 3. Anti-Healing (Grievous Wounds / Ağır Yara)
+  // 3. Anti-Healing (Ağır Yara)
   if (healerCount >= 1) {
     const listHealer = healerNames.join(", ");
-    if (myArchetype === "AP") {
+    const match = findMobaCounterItem("HEAL", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3165", // Morellonomicon
-        name: "Morellonomikon",
-        cost: 2200,
-        reason: `Rakipte yüksek iyileşme/yenilenme gücüne sahip şampiyonlar (${listHealer}) var. Büyü hasarı verdiğinde rakiplerin iyileştirme etkilerini %40 azaltır.`
-      });
-    } else if (myArchetype === "ADC" || myArchetype === "Fighter") {
-      recommendations.push({
-        id: "3033", // Mortal Reminder or Chempunk Chainsword (id: 3091)
-        name: "Ölüm Hatırası / Kimyasal Kimya-Pala",
-        cost: 3000,
-        reason: `Rakipteki iyileşme etkilerini (${listHealer}) kırmak için fiziksel hasar verdiğinde %40 Ağır Yara uygular.`
-      });
-    } else if (myArchetype === "Tank") {
-      recommendations.push({
-        id: "3075", // Thornmail
-        name: "Çivili Zırh",
-        cost: 2700,
-        reason: `Rakipteki yenilenme şampiyonlarına (${listHealer}) karşı düz vuruş aldığında rakiplere %40 Ağır Yara uygular ve yüksek zırh sağlar.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `Rakipte yüksek iyileşme/yenilenme gücüne sahip şampiyonlar (${listHealer}) var. Hasar verdiğinde onların iyileştirme etkilerini %40 azaltır.`
       });
     }
   }
@@ -239,26 +219,13 @@ export function getSituationalRecommendations(enemies, myChampion, myRole) {
   // 4. Anti-Tank (Penetration / Yüzdesel Hasar)
   if (tankCount >= 2) {
     const listTanks = tankNames.slice(0, 2).join(", ");
-    if (myArchetype === "AP") {
+    const match = findMobaCounterItem("TANK", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3135", // Void Staff
-        name: "Boşluk Değneği",
-        cost: 3000,
-        reason: `Rakip ön saflardaki tanklar (${listTanks}) yüksek büyü direnci çıktığı için büyü hasarının %40'ının büyü direncini yok saymasını sağlar.`
-      });
-    } else if (myArchetype === "ADC") {
-      recommendations.push({
-        id: "3036", // Lord Dominik's Regards
-        name: "Dominik Efendi'nin Hürmeti",
-        cost: 3000,
-        reason: `Yüksek zırh kasan tanklara (${listTanks}) karşı %35 zırh delme ve kritik şansı sağlar.`
-      });
-    } else if (myArchetype === "Fighter") {
-      recommendations.push({
-        id: "3071", // Black Cleaver
-        name: "Kara Balta",
-        cost: 3000,
-        reason: `Rakip tankların (${listTanks}) zırhını her vuruşta eksilterek tüm takımının onlara daha fazla fiziksel hasar vurmasını sağlar.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `Rakip ön saflardaki tankların (${listTanks}) yüksek zırh/dirençlerini aşarak hasarını maksimize eder.`
       });
     }
   }
@@ -266,19 +233,13 @@ export function getSituationalRecommendations(enemies, myChampion, myRole) {
   // 5. Anti-Burst / Anti-Assassin
   if (burstCount >= 2) {
     const listBurst = burstNames.slice(0, 2).join(", ");
-    if (myArchetype === "Fighter") {
+    const match = findMobaCounterItem("BURST", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3053", // Sterak's Gage
-        name: "Sterak'ın Güvencesi",
-        cost: 3000,
-        reason: `Rakip suikastçıların/anlık hasar kaynaklarının (${listBurst}) seni tekte eritmesini önlemek için yüksek miktarda can kalkanı verir.`
-      });
-    } else if (myArchetype === "AP" && !recommendations.some(r => r.id === "3157")) {
-      recommendations.push({
-        id: "3157",
-        name: "Zhonya'nın Kumsaati",
-        cost: 3250,
-        reason: `Rakip suikastçıların (${listBurst}) burst hasarını/yeteneklerini boşa çıkarmak için durdurulamaz altın modunu kullanabilirsin.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `Rakip suikastçıların/anlık hasar kaynaklarının (${listBurst}) seni tekte eritmesini engellemek için koruma sağlar.`
       });
     }
   }
@@ -286,36 +247,13 @@ export function getSituationalRecommendations(enemies, myChampion, myRole) {
   // 6. Anti-CC / Slow
   if (ccCount >= 2) {
     const listCc = ccNames.slice(0, 3).join(", ");
-    recommendations.push({
-      id: "3111", // Mercury's Treads
-      name: "Merkür'ün Adımları",
-      cost: 1200,
-      reason: `Rakipte yoğun kitle kontrolü (${listCc}) bulunuyor. Sıvışma özelliği vererek sersemletme, yavaşlatma ve kışkırtma sürelerini %30 azaltır.`
-    });
-  }
-
-  // Fallback / General items if recommendations are empty
-  if (recommendations.length === 0) {
-    if (myArchetype === "Tank") {
+    const match = findMobaCounterItem("CC", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "6665",
-        name: "Şahbaz Jak'Sho",
-        cost: 3200,
-        reason: "Karmaşık hasar dağılımına karşı savaş uzadıkça zırh ve büyü direncini arttırır."
-      });
-    } else if (myArchetype === "AP") {
-      recommendations.push({
-        id: "3089",
-        name: "Rabadon'un Ölüm Şapkası",
-        cost: 3600,
-        reason: "Genel yetenek gücünü devasa oranda arttırarak hasarını maksimize eder."
-      });
-    } else {
-      recommendations.push({
-        id: "3072",
-        name: "Kanasusamış",
-        cost: 3400,
-        reason: "Genel hayatta kalma ve yüksek can çalma/saldırı gücü takviyesi."
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `Rakipte yoğun kitle kontrolü (${listCc}) bulunuyor. Sıvışma özelliği vererek sersemletme, yavaşlatma sürelerini %30 azaltır.`
       });
     }
   }
@@ -404,10 +342,10 @@ export function getMatchupTips(enemies) {
   return tips;
 }
 
-// Recommends situational items against a single selected enemy champion
-export function getSingleEnemyRecommendations(enemy, myChampion, myRole) {
+// Recommends situational items against a single selected enemy champion, strictly matching Mobalytics build suggestions
+export function getSingleEnemyRecommendations(enemy, myChampion, myRole, resolvedBuild = null) {
   const recommendations = [];
-  if (!enemy) return recommendations;
+  if (!enemy || !resolvedBuild) return recommendations;
 
   const name = enemy.name;
   const dmgType = getChampionDamageType(enemy);
@@ -416,171 +354,82 @@ export function getSingleEnemyRecommendations(enemy, myChampion, myRole) {
   const isCc = CC_CHAMPIONS.has(enemy.id) || CC_CHAMPIONS.has(enemy.name);
   const isTank = enemy.tags?.includes("Tank") || (enemy.tags?.includes("Fighter") && enemy.info?.defense >= 6);
 
-  // Determine player's itemization archetype
-  let myArchetype = "Fighter";
-  if (myChampion.tags?.includes("Mage")) {
-    myArchetype = "AP";
-  } else if (myChampion.tags?.includes("Marksman")) {
-    myArchetype = "ADC";
-  } else if (myChampion.tags?.includes("Tank")) {
-    myArchetype = "Tank";
-  } else if (myRole === "Support" && myChampion.tags?.includes("Support")) {
-    myArchetype = "Support";
-  } else if (myChampion.tags?.includes("Assassin")) {
-    myArchetype = myChampion.info?.magic > myChampion.info?.attack ? "AP" : "Fighter";
-  }
-
   // 1. Anti-AP (Magic Resist)
   if (dmgType === "AP") {
-    if (myArchetype === "AP") {
+    const match = findMobaCounterItem("AP", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3102",
-        name: "Banshee'ın Duvağı",
-        cost: 3100,
-        reason: `${name} büyü hasarı (AP) odaklı bir şampiyon. Yetenek engelleyen büyü kalkanı ve büyü direnci sağlayarak onun anlık hasarından korunmanı sağlar.`
-      });
-    } else if (myArchetype === "Fighter") {
-      recommendations.push({
-        id: "3156",
-        name: "Malmortius'un Ağzı",
-        cost: 2800,
-        reason: `${name}'in büyü hasarına karşı dövüşçüler için en iyi savunma eşyasıdır. Canın azaldığında büyük bir sihirli kalkan elde etmeni sağlar.`
-      });
-    } else if (myArchetype === "ADC") {
-      recommendations.push({
-        id: "3111", // Wit's End represented by boots/MR item in DDragon
-        name: "Merkür'ün Adımları / Wit's End",
-        cost: 2800,
-        reason: `${name} büyü hasarı vuruyor. Hem büyü direnci hem de kitle kontrolünden kurtulmak için koruyucu etki sağlar.`
-      });
-    } else if (myArchetype === "Tank") {
-      recommendations.push({
-        id: "2504",
-        name: "Kutluyas Rukern",
-        cost: 2900,
-        reason: `${name} büyü hasarı veriyor. Kutluyas Rukern tanklar için azami cana oranla devasa bir büyü kalkanı kazandırarak AP hasarını soğurur.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `${name} büyü hasarı (AP) odaklı bir şampiyon. Büyü direnci sağlayarak onun hasarından korunmanı sağlar.`
       });
     }
   }
 
   // 2. Anti-AD / Anti-Crit
   if (dmgType === "AD") {
-    if (myArchetype === "AP") {
+    const match = findMobaCounterItem("AD", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3157",
-        name: "Zhonya'nın Kumsaati",
-        cost: 3250,
-        reason: `${name} fiziksel hasar (AD) odaklı bir şampiyon. Zhonya'nın Kumsaati zırh verir ve anlık kritik durumlarda hedef alınamaz olmanı sağlar.`
-      });
-    } else if (myArchetype === "Fighter") {
-      recommendations.push({
-        id: "3010",
-        name: "Ölümün Dansı",
-        cost: 3200,
-        reason: `${name}'in fiziksel hasarına karşı dövüşçüler için harikadır. Hasarın %30'unu zamana yayar ve alt etmelerde can yeniler.`
-      });
-    } else if (myArchetype === "ADC") {
-      recommendations.push({
-        id: "3026",
-        name: "Koruyucu Melek",
-        cost: 3000,
-        reason: `${name}'in fiziksel hasar baskısına karşı nişancılar için zırh ve düştüğünde yeniden canlanma özelliği sağlar.`
-      });
-    } else if (myArchetype === "Tank") {
-      recommendations.push({
-        id: "3143",
-        name: "Randuin'in Alameti",
-        cost: 2700,
-        reason: `${name} fiziksel hasar veriyor. Randuin, zırh vermesinin yanında kritik vuruşlardan alınan hasarı azaltır ve rakipleri yavaşlatır.`
-      });
-      recommendations.push({
-        id: "3110",
-        name: "Donmuş Yürek",
-        cost: 2300,
-        reason: `${name} düz vuruş/saldırı hızı odaklı fiziksel hasar vuruyor. Donmuş Yürek yüksek zırh verir ve rakibin saldırı hızını azaltır.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `${name} fiziksel hasar (AD) odaklı bir şampiyon. Fiziksel hasar ve düz vuruş baskısına karşı koruma sağlar.`
       });
     }
   }
 
   // 3. Anti-Healing (Ağır Yara)
   if (isHealer) {
-    if (myArchetype === "AP") {
+    const match = findMobaCounterItem("HEAL", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3165",
-        name: "Morellonomikon",
-        cost: 2200,
-        reason: `${name} yüksek iyileşme/can çalma yeteneğine sahip. Morellonomikon büyü hasarı verdiğinde rakibe Ağır Yara uygulayarak iyileşmesini %40 azaltır.`
-      });
-    } else if (myArchetype === "ADC" || myArchetype === "Fighter") {
-      recommendations.push({
-        id: "3033",
-        name: "Ölüm Hatırası",
-        cost: 3000,
-        reason: `${name}'in can çalma/iyileşme etkilerini zayıflatmak için fiziksel hasar verdiğinde rakibe %40 Ağır Yara uygulayan bu eşyayı almalısın.`
-      });
-    } else if (myArchetype === "Tank") {
-      recommendations.push({
-        id: "3075",
-        name: "Çivili Zırh",
-        cost: 2700,
-        reason: `${name}'in iyileşme gücünü azaltmak için düz vuruş aldığında rakibe %40 Ağır Yara uygulayan Çivili Zırh satın almalısın.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `${name} yüksek iyileşme/can çalma yeteneğine sahip. Hasar verdiğinde iyileşmesini %40 azaltır.`
       });
     }
   }
 
   // 4. Anti-Tank (Zırh / Büyü Nüfuzu)
   if (isTank) {
-    if (myArchetype === "AP") {
+    const match = findMobaCounterItem("TANK", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3135",
-        name: "Boşluk Değneği",
-        cost: 3000,
-        reason: `${name} yüksek dirençlere sahip bir tank. Boşluk Değneği büyü direncinin %40'ını yok sayarak AP hasarını tanka karşı korur.`
-      });
-    } else if (myArchetype === "ADC") {
-      recommendations.push({
-        id: "3036",
-        name: "Dominik Efendi'nin Hürmeti",
-        cost: 3000,
-        reason: `${name} zırhı yüksek bir tank. Dominik Efendi zırh delme (%35) vererek tankı eritmeni sağlar.`
-      });
-    } else if (myArchetype === "Fighter") {
-      recommendations.push({
-        id: "3071",
-        name: "Kara Balta",
-        cost: 3000,
-        reason: `${name} tank olduğu için her vuruşunda zırhını eksilten Kara Balta, hem sana hem de takımına fiziksel hasar avantajı sağlar.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `${name} yüksek dirençlere sahip bir tank. Zırh/büyü nüfuzu sağlayarak onu eritmeni sağlar.`
       });
     }
   }
 
   // 5. Anti-Burst (Sterak / Zhonya / GA)
   if (isBurst) {
-    if (myArchetype === "Fighter") {
+    const match = findMobaCounterItem("BURST", resolvedBuild);
+    if (match) {
       recommendations.push({
-        id: "3053",
-        name: "Sterak'ın Güvencesi",
-        cost: 3000,
-        reason: `${name} anlık yüksek hasar (burst) potansiyeline sahip. Sterak, anlık hasar aldığında sana devasa bir can kalkanı verir.`
-      });
-    } else if (myArchetype === "AP" && !recommendations.some(r => r.id === "3157")) {
-      recommendations.push({
-        id: "3157",
-        name: "Zhonya'nın Kumsaati",
-        cost: 3250,
-        reason: `${name}'in anlık hasar kombolarını veya suikast girişimlerini tamamen boşa çıkarmak için Zhonya'nın aktif altın modunu kullanabilirsin.`
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `${name} anlık yüksek hasar (burst) potansiyeline sahip. Burst hasarını engellemek veya soğurmak için koruma sağlar.`
       });
     }
   }
 
   // 6. Anti-CC (Sıvışma / Merkür)
   if (isCc) {
-    recommendations.push({
-      id: "3111",
-      name: "Merkür'ün Adımları",
-      cost: 1200,
-      reason: `${name} yüksek kitle kontrolüne sahip. Merkür'ün Adımları sıvışma vererek sersemletme, yavaşlatma vb. kitle kontrolü sürelerini %30 kısaltır.`
-    });
+    const match = findMobaCounterItem("CC", resolvedBuild);
+    if (match) {
+      recommendations.push({
+        id: match.id,
+        name: match.name,
+        cost: match.cost,
+        reason: `${name} yüksek kitle kontrolüne sahip. Sıvışma vererek kitle kontrolü sürelerini %30 kısaltır.`
+      });
+    }
   }
 
   // Deduplicate
@@ -592,15 +441,15 @@ export function getSingleEnemyRecommendations(enemy, myChampion, myRole) {
   });
 }
 
-// Combines counter recommendations against multiple selected enemies (for 2v2 bot/support matchup)
-export function getCombinedEnemyRecommendations(selectedEnemies, myChampion, myRole) {
-  if (!selectedEnemies || selectedEnemies.length === 0) return [];
+// Combines counter recommendations against multiple selected enemies
+export function getCombinedEnemyRecommendations(selectedEnemies, myChampion, myRole, resolvedBuild = null) {
+  if (!selectedEnemies || selectedEnemies.length === 0 || !resolvedBuild) return [];
 
   const itemsMap = new Map();
 
   selectedEnemies.forEach(enemy => {
     if (!enemy) return;
-    const recs = getSingleEnemyRecommendations(enemy, myChampion, myRole);
+    const recs = getSingleEnemyRecommendations(enemy, myChampion, myRole, resolvedBuild);
     recs.forEach(rec => {
       if (!itemsMap.has(rec.id)) {
         itemsMap.set(rec.id, {
@@ -620,5 +469,3 @@ export function getCombinedEnemyRecommendations(selectedEnemies, myChampion, myR
 
   return Array.from(itemsMap.values());
 }
-
-

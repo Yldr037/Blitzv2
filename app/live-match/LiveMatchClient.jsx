@@ -45,23 +45,23 @@ const laneTranslations = {
 const getMobalyticsSlug = (championId) => {
   const overrides = {
     MonkeyKing: "wukong",
-    JarvanIV: "jarvan-iv",
-    DrMundo: "dr-mundo",
-    MissFortune: "miss-fortune",
-    MasterYi: "master-yi",
-    LeeSin: "lee-sin",
-    KogMaw: "kog-maw",
-    RekSai: "rek-sai",
-    TahmKench: "tahm-kench",
-    TwistedFate: "twisted-fate",
-    XinZhao: "xin-zhao",
-    AurelionSol: "aurelion-sol",
-    ChoGath: "cho-gath",
-    KaiSa: "kai-sa",
-    BelVeth: "bel-veth",
-    KSante: "k-sante",
-    VelKoz: "vel-koz",
-    Renata: "renata-glasc",
+    JarvanIV: "jarvaniv",
+    DrMundo: "drmundo",
+    MissFortune: "missfortune",
+    MasterYi: "masteryi",
+    LeeSin: "leesin",
+    KogMaw: "kogmaw",
+    RekSai: "reksai",
+    TahmKench: "tahmkench",
+    TwistedFate: "twistedfate",
+    XinZhao: "xinzhao",
+    AurelionSol: "aurelionsol",
+    ChoGath: "chogath",
+    KaiSa: "kaisa",
+    BelVeth: "belveth",
+    KSante: "ksante",
+    VelKoz: "velkoz",
+    Renata: "renata",
   };
   
   if (overrides[championId]) {
@@ -348,8 +348,8 @@ export default function LiveMatchClient({ myChampion, myRole, enemies, version }
     const apPercentage = total > 0 ? Math.round(((apCount + mixedCount*0.5) / total) * 100) : 0;
     const adPercentage = total > 0 ? 100 - apPercentage : 0;
 
-    // 2. Situational item recommendations
-    const situationalRecs = getSituationalRecommendations(enemies, myChampion, myRole);
+    // 2. Situational item recommendations with build compatibility check
+    const situationalRecs = getSituationalRecommendations(enemies, myChampion, myRole, resolvedBuild);
     
     // 3. Matchup tips
     const tips = getMatchupTips(enemies);
@@ -364,12 +364,12 @@ export default function LiveMatchClient({ myChampion, myRole, enemies, version }
       situationalRecs,
       tips
     };
-  }, [enemies, myChampion, myRole]);
+  }, [enemies, myChampion, myRole, resolvedBuild]);
 
   const combinedRecommendations = useMemo(() => {
     if (selectedEnemies.length === 0) return [];
-    return getCombinedEnemyRecommendations(selectedEnemies, myChampion, myRole);
-  }, [selectedEnemies, myChampion, myRole]);
+    return getCombinedEnemyRecommendations(selectedEnemies, myChampion, myRole, resolvedBuild);
+  }, [selectedEnemies, myChampion, myRole, resolvedBuild]);
 
   const filteredTips = useMemo(() => {
     if (selectedEnemies.length === 0) return enemyAnalysis.tips;
@@ -454,7 +454,7 @@ export default function LiveMatchClient({ myChampion, myRole, enemies, version }
               </span>
             ) : buildError ? (
               <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400 font-semibold">
-                Yerel Yedek Build Yüklendi
+                Veri Alınamadı
               </span>
             ) : (
               <div className="flex items-center gap-2">
@@ -466,183 +466,195 @@ export default function LiveMatchClient({ myChampion, myRole, enemies, version }
             )}
           </div>
 
-          {/* Core Build Section */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider">Eşya Satın Alma Düzeni:</h3>
-            
-            {/* Starter items */}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest pl-1">Başlangıç:</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {resolvedBuild.starters?.filter(Boolean).map((item, idx) => {
-                  const details = itemsMap?.[item.id];
-                  const name = details?.name || `Eşya #${item.id}`;
-                  const cost = details?.gold?.total || 0;
-                  const img = `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${item.id}.png`;
-
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => setActiveItem({ id: item.id, name, cost, description: details?.description, imgSrc: img })}
-                      className="flex items-center gap-2 p-1.5 rounded-lg bg-white/2 border border-white/5 hover:border-amber-500/20 hover:bg-white/4 transition text-left cursor-pointer truncate"
-                    >
-                      <div className="relative w-8 h-8 rounded overflow-hidden flex-shrink-0 border border-white/10">
-                        <Image src={img} alt={name} fill unoptimized sizes="32px" className="object-cover" />
-                      </div>
-                      <div className="overflow-hidden">
-                        <p className="text-[10px] font-bold text-white/95 truncate">{name}</p>
-                        <p className="text-[9px] text-amber-400/90 font-semibold">{cost} g</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+          {buildError ? (
+            <div className="flex flex-col items-center justify-center p-8 text-center text-white/40 gap-3 my-auto">
+              <ShieldAlert size={36} className="text-red-400/60" />
+              <p className="text-xs font-bold uppercase tracking-wider text-white/60">Canlı Veri Alınamadı</p>
+              <p className="text-[11px] leading-relaxed max-w-[280px]">
+                Bu şampiyon veya rol için Mobalytics canlı verileri alınamadı. Canlı eşya ve rün önerileri şu anda gösterilemiyor.
+              </p>
             </div>
+          ) : (
+            <>
+              {/* Core Build Section */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider">Eşya Satın Alma Düzeni:</h3>
+                
+                {/* Starter items */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest pl-1">Başlangıç:</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {resolvedBuild.starters?.filter(Boolean).map((item, idx) => {
+                      const details = itemsMap?.[item.id];
+                      const name = details?.name || `Eşya #${item.id}`;
+                      const cost = details?.gold?.total || 0;
+                      const img = `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${item.id}.png`;
 
-            {/* Core items */}
-            <div className="space-y-1.5 pt-1.5">
-              <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest pl-1">Çekirdek Eşyalar (Core):</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {resolvedBuild.core?.filter(Boolean).map((item, idx) => {
-                  const details = itemsMap?.[item.id];
-                  const name = details?.name || `Eşya #${item.id}`;
-                  const cost = details?.gold?.total || 0;
-                  const img = `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${item.id}.png`;
-
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => setActiveItem({ id: item.id, name, cost, description: details?.description, imgSrc: img })}
-                      className="flex items-center gap-2 p-2 rounded-lg bg-white/2 border border-white/5 hover:border-amber-500/20 hover:bg-white/4 transition text-left cursor-pointer truncate"
-                    >
-                      <div className="relative w-9 h-9 rounded overflow-hidden flex-shrink-0 border border-white/10">
-                        <Image src={img} alt={name} fill unoptimized sizes="36px" className="object-cover" />
-                      </div>
-                      <div className="overflow-hidden">
-                        <p className="text-[10px] font-bold text-white/95 truncate">{name}</p>
-                        <p className="text-[9px] text-amber-400/90 font-semibold">{cost} g</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Full build / situational items */}
-            <div className="space-y-1.5 pt-1.5">
-              <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest pl-1">Olası Diğer Eşyalar:</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {resolvedBuild.situational?.filter(Boolean).map((item, idx) => {
-                  const details = itemsMap?.[item.id];
-                  const name = details?.name || `Eşya #${item.id}`;
-                  const cost = details?.gold?.total || 0;
-                  const img = `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${item.id}.png`;
-
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => setActiveItem({ id: item.id, name, cost, description: details?.description, imgSrc: img })}
-                      className="flex items-center gap-2 p-2 rounded-lg bg-white/2 border border-white/5 hover:border-amber-500/20 hover:bg-white/4 transition text-left cursor-pointer truncate"
-                    >
-                      <div className="relative w-9 h-9 rounded overflow-hidden flex-shrink-0 border border-white/10">
-                        <Image src={img} alt={name} fill unoptimized sizes="36px" className="object-cover" />
-                      </div>
-                      <div className="overflow-hidden">
-                        <p className="text-[10px] font-bold text-white/95 truncate">{name}</p>
-                        <p className="text-[9px] text-amber-400/90 font-semibold">{cost} g</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Runes Reforged Section */}
-          <div className="space-y-3 pt-2 border-t border-white/5">
-            <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider">Tavsiye Edilen Anahtar Rün:</h3>
-            {resolvedBuild.runes ? (
-              <div className="flex items-start gap-4 p-3.5 rounded-xl bg-white/2 border border-white/5 hover:border-amber-500/20 transition-all">
-                <div className="relative w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-xl bg-black/40 border border-white/10 p-1">
-                  <Image
-                    src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${resolvedBuild.runes.icon}`}
-                    alt={resolvedBuild.runes.name}
-                    width={40}
-                    height={40}
-                    unoptimized
-                    className="object-contain"
-                  />
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => setActiveItem({ id: item.id, name, cost, description: details?.description, imgSrc: img })}
+                          className="flex items-center gap-2 p-1.5 rounded-lg bg-white/2 border border-white/5 hover:border-amber-500/20 hover:bg-white/4 transition text-left cursor-pointer truncate"
+                        >
+                          <div className="relative w-8 h-8 rounded overflow-hidden flex-shrink-0 border border-white/10">
+                            <Image src={img} alt={name} fill unoptimized sizes="32px" className="object-cover" />
+                          </div>
+                          <div className="overflow-hidden">
+                            <p className="text-[10px] font-bold text-white/95 truncate">{name}</p>
+                            <p className="text-[9px] text-amber-400/90 font-semibold">{cost} g</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-bold text-amber-400">{resolvedBuild.runes.name}</p>
-                    <span className="text-[9px] font-bold text-white/30 uppercase px-1.5 py-0.5 rounded bg-white/5">
-                      {resolvedBuild.runes.path}
+
+                {/* Core items */}
+                <div className="space-y-1.5 pt-1.5">
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest pl-1">Çekirdek Eşyalar (Core):</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {resolvedBuild.core?.filter(Boolean).map((item, idx) => {
+                      const details = itemsMap?.[item.id];
+                      const name = details?.name || `Eşya #${item.id}`;
+                      const cost = details?.gold?.total || 0;
+                      const img = `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${item.id}.png`;
+
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => setActiveItem({ id: item.id, name, cost, description: details?.description, imgSrc: img })}
+                          className="flex items-center gap-2 p-2 rounded-lg bg-white/2 border border-white/5 hover:border-amber-500/20 hover:bg-white/4 transition text-left cursor-pointer truncate"
+                        >
+                          <div className="relative w-9 h-9 rounded overflow-hidden flex-shrink-0 border border-white/10">
+                            <Image src={img} alt={name} fill unoptimized sizes="36px" className="object-cover" />
+                          </div>
+                          <div className="overflow-hidden">
+                            <p className="text-[10px] font-bold text-white/95 truncate">{name}</p>
+                            <p className="text-[9px] text-amber-400/90 font-semibold">{cost} g</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Full build / situational items */}
+                <div className="space-y-1.5 pt-1.5">
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest pl-1">Olası Diğer Eşyalar:</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {resolvedBuild.situational?.filter(Boolean).map((item, idx) => {
+                      const details = itemsMap?.[item.id];
+                      const name = details?.name || `Eşya #${item.id}`;
+                      const cost = details?.gold?.total || 0;
+                      const img = `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${item.id}.png`;
+
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => setActiveItem({ id: item.id, name, cost, description: details?.description, imgSrc: img })}
+                          className="flex items-center gap-2 p-2 rounded-lg bg-white/2 border border-white/5 hover:border-amber-500/20 hover:bg-white/4 transition text-left cursor-pointer truncate"
+                        >
+                          <div className="relative w-9 h-9 rounded overflow-hidden flex-shrink-0 border border-white/10">
+                            <Image src={img} alt={name} fill unoptimized sizes="36px" className="object-cover" />
+                          </div>
+                          <div className="overflow-hidden">
+                            <p className="text-[10px] font-bold text-white/95 truncate">{name}</p>
+                            <p className="text-[9px] text-amber-400/90 font-semibold">{cost} g</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Runes Reforged Section */}
+              <div className="space-y-3 pt-2 border-t border-white/5">
+                <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider">Tavsiye Edilen Anahtar Rün:</h3>
+                {resolvedBuild.runes ? (
+                  <div className="flex items-start gap-4 p-3.5 rounded-xl bg-white/2 border border-white/5 hover:border-amber-500/20 transition-all">
+                    <div className="relative w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-xl bg-black/40 border border-white/10 p-1">
+                      <Image
+                        src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${resolvedBuild.runes.icon}`}
+                        alt={resolvedBuild.runes.name}
+                        width={40}
+                        height={40}
+                        unoptimized
+                        className="object-contain"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-amber-400">{resolvedBuild.runes.name}</p>
+                        <span className="text-[9px] font-bold text-white/30 uppercase px-1.5 py-0.5 rounded bg-white/5">
+                          {resolvedBuild.runes.path}
+                        </span>
+                      </div>
+                      <p className="text-xs text-white/50 mt-1 leading-relaxed">
+                        {resolvedBuild.runes.description}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/30">Rün bilgisi alınamadı.</p>
+                )}
+              </div>
+
+              {/* Skill order max/grid section */}
+              <div className="space-y-3 pt-2 border-t border-white/5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider">Maksimum Yetenek Sırası:</h3>
+                  {resolvedBuild.skillMaxOrder && (
+                    <span className="text-[11px] font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
+                      {resolvedBuild.skillMaxOrder}
                     </span>
-                  </div>
-                  <p className="text-xs text-white/50 mt-1 leading-relaxed">
-                    {resolvedBuild.runes.description}
-                  </p>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <p className="text-xs text-white/30">Rün bilgisi alınamadı.</p>
-            )}
-          </div>
-
-          {/* Skill order max/grid section */}
-          <div className="space-y-3 pt-2 border-t border-white/5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider">Maksimum Yetenek Sırası:</h3>
-              {resolvedBuild.skillMaxOrder && (
-                <span className="text-[11px] font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
-                  {resolvedBuild.skillMaxOrder}
-                </span>
-              )}
-            </div>
-            
-            {/* Detailed Skill grid (Truncated visual flow for second monitor) */}
-            {resolvedBuild.skillOrder ? (
-              <div className="w-full overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-white/5">
-                <div className="min-w-[480px] flex flex-col gap-1.5 text-[9px]">
-                  {/* Grid index numbers */}
-                  <div className="flex items-center gap-1 pl-6">
-                    {Array.from({ length: 18 }).map((_, idx) => (
-                      <div key={idx} className="w-5 text-center font-bold text-white/30">
-                        {idx + 1}
+                
+                {/* Detailed Skill grid */}
+                {resolvedBuild.skillOrder ? (
+                  <div className="w-full overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-white/5">
+                    <div className="min-w-[480px] flex flex-col gap-1.5 text-[9px]">
+                      {/* Grid index numbers */}
+                      <div className="flex items-center gap-1 pl-6">
+                        {Array.from({ length: 18 }).map((_, idx) => (
+                          <div key={idx} className="w-5 text-center font-bold text-white/30">
+                            {idx + 1}
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                      {/* Rows for Q, W, E, R */}
+                      {["Q", "W", "E", "R"].map((key) => {
+                        const keyNum = key === "Q" ? 1 : key === "W" ? 2 : key === "E" ? 3 : 4;
+                        return (
+                          <div key={key} className="flex items-center gap-1.5">
+                            <div className="w-4 font-black text-amber-400">{key}</div>
+                            <div className="flex gap-1 flex-1">
+                              {Array.from({ length: 18 }).map((_, idx) => {
+                                const isLeveled = resolvedBuild.skillOrder[idx] === keyNum;
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`w-5 h-5 rounded flex items-center justify-center border ${
+                                      isLeveled
+                                        ? "bg-amber-500/20 border-amber-500 text-amber-400 font-bold"
+                                        : "bg-white/2 border-white/5 text-transparent"
+                                    }`}
+                                  >
+                                    {key}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  {/* Rows for Q, W, E, R */}
-                  {["Q", "W", "E", "R"].map((key) => {
-                    const keyNum = key === "Q" ? 1 : key === "W" ? 2 : key === "E" ? 3 : 4;
-                    return (
-                      <div key={key} className="flex items-center gap-1.5">
-                        <div className="w-4 font-black text-amber-400">{key}</div>
-                        <div className="flex gap-1 flex-1">
-                          {Array.from({ length: 18 }).map((_, idx) => {
-                            const isLeveled = resolvedBuild.skillOrder[idx] === keyNum;
-                            return (
-                              <div
-                                key={idx}
-                                className={`w-5 h-5 rounded flex items-center justify-center border ${
-                                  isLeveled
-                                    ? "bg-amber-500/20 border-amber-500 text-amber-400 font-bold"
-                                    : "bg-white/2 border-white/5 text-transparent"
-                                }`}
-                              >
-                                {key}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
+            </>
+          )}
 
         </section>
 
